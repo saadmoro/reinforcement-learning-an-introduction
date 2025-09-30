@@ -51,19 +51,95 @@ class State:
             self.finish = True
             return self.finish
 
-
-
         #Game has not ended
         self.finish = False
         return self.finish
+    
+    def next_state(self, i, j, token):
+        self.board[i, j] = token
 
+    def print_board(self):
+        horiz = '----'
+        for i in range(BOARD_SIZE):
+            horiz += '---'
+
+        for i in range(BOARD_SIZE):
+            print(horiz)
+            row = '| '
+            for j in range(BOARD_SIZE):
+                if self.board[i, j] == 1:
+                    row += 'X | '
+                elif self.board[i,j] == -1:
+                    row += 'O | '
+                else:
+                    row += '. | '
+                
+            print(row)
+        print(horiz)
 
 
 class Player:
 
-    def __init__(self):
+    def __init__(self, step_size = 0.1, epsilon = 0.1):
+        self.estimations = dict()
+        self.step_size = step_size
+        self.epsilon = epsilon
+        self.token = 0
+        
+    def set_token(self, token):
+        self.token = token
+
+    def reset(self):
         pass
+
+    def act(self):
+        pass
+
+    def save_policy(self):
+        pass
+
+    def load_policy(self):
+        pass
+
+class game_master:
+
+    def __init__(self, player1, player2):
+        self.p1 = player1
+        self.p2 = player2
+        self.current_player = None
+        self.p1_token = 1
+        self.p2_token = -1
+        self.p1.set_token(self.p1_token)
+        self.p2.set_token(self.p2_token)
+        self.state = State()
+
+    def reset(self):
+        self.p1.reset()
+        self.p2.reset()
+
+    def alternate(self):
+        while True:
+            yield self.p1
+            yield self.p2
+
+    def play(self):
+        alternator = self.alternate()
+        self.reset()
+        
+        while True:
+            player = next(alternator)
+            i, j, token = player.act()
+            #Get hash for next state of the game
+
+            #Set states for each player
+
+            #Check for completion of game
+
+            #Return winner
+
+
 
 if __name__ == "__main__":
     game = State()
+    game.print_board()
     
