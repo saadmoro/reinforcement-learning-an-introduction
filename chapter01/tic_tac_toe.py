@@ -69,7 +69,7 @@ class State:
     def next_state(self, i, j, token):
         new_state = State()
         new_state.board = np.copy(self.board)
-        self.board[i, j] = token
+        new_state.board[i, j] = token
         return new_state
 
     def print_board(self):
@@ -125,9 +125,10 @@ class Player:
         self.step_size = step_size
         self.epsilon = epsilon
         self.states = []
+        self.greedy = []
         self.token = 0
         
-    def initialize_estimations(self, token):
+    def set(self, token):
         self.token = token
 
         for hash_val in ALL_STATES:
@@ -144,7 +145,7 @@ class Player:
                 self.estimations[hash_val] = 0.5
 
 
-    #TODO: CHECK BOOK
+    #V(S_t) <- V(S_t) + alpha * [V(S_(t+1)) - V(S_t)]
     def update(self):
         states = [state.hash() for state in self.states]
         
@@ -159,15 +160,19 @@ class Player:
     def reset(self):
         self.states = []
 
+    def set_state(self, state):
+        self.states.append(state)
+        self.greedy.append(True)
+
     def act(self):
         state = self.states[-1]
         next_states = []
         next_positions = []
         for i in range(BOARD_SIZE):
             for j in range(BOARD_SIZE):
-                if state.data[i, j] == 0:
+                if state.board[i, j] == 0:
                     next_positions.append([i, j])
-                    next_states.append(state.next_state(i, j, self.symbol).hash())
+                    next_states.append(state.next_state(i, j, self.token).hash())
         
         if np.random.rand() < self.epsilon:
             action = next_positions[np.random.randint(len(next_positions))]
@@ -176,15 +181,23 @@ class Player:
             return action
         
         values = []
-        #TODO: HERE NEXT
+        for hash_val, pos in zip(next_states, next_positions):
+            values.append((self.estimations[hash_val], pos))
+        np.random.shuffle(values)
+        values.sort(key = lambda x: x[0], reverse = True)
+        action = values[0][1]
+        action.append(self.token)
+        return action
 
     def save_policy(self):
-        pass
+        with open('policy_%s.bin' % ('first' if self.token == 1 else 'second'), 'wb') as f:
+            pickle.dump(self.estimations, f)
 
     def load_policy(self):
-        pass
+        with open('policy_%s.bin' % ('first' if self.token == 1 else 'second'), 'rb') as f:
+            self.estimations = pickle.load(f)
 
-class game_master:
+class Game_Master:
 
     def __init__(self, player1, player2):
         self.p1 = player1
@@ -192,8 +205,8 @@ class game_master:
         self.current_player = None
         self.p1_token = 1
         self.p2_token = -1
-        self.p1.set_token(self.p1_token)
-        self.p2.set_token(self.p2_token)
+        self.p1.set(self.p1_token)
+        self.p2.set(self.p2_token)
         self.state = State()
 
     def reset(self):
@@ -208,24 +221,80 @@ class game_master:
     def play(self):
         alternator = self.alternate()
         self.reset()
+
+        current_state = State()
+        self.p1.set_state(current_state)
+        self.p2.set_state(current_state)
         
         while True:
             player = next(alternator)
             i, j, token = player.act()
             #Get hash for next state of the game
-
+            next_state_hash = current_state.next_state(i, j, token).hash()
+            current_state, is_finished = ALL_STATES[next_state_hash]
             #Set states for each player
+            self.p1.set_state(current_state)
+            self.p2.set_state(current_state)
 
             #Check for completion of game
-
+            if is_finished:
+                return current_state.winner
             #Return winner
 
-def main():
-    all_states = get_all_states()
+def train(epochs, print_every_n = 500):
+    player1 = Player(epsilon = 0.01)
+    player2 = Player(epsilon = 0.01)
 
+    gm = Game_Master(player1, player2)
+
+    player1_win = 0.0
+    player2_win = 0.0
+    ties = 0.0
+
+    for i in range(1, epochs + 1):
+        winner = gm.play()
+        if winner == 1:
+            player1_win +=1
+        if winner == -1:
+            player2_win += 1
+        if winner == 0:
+            ties += 1
+        if i % print_every_n == 0:
+            print('Epoch %d, Player 1 Winrate: %.02f, Player 2 Winrate: %0.2f, Tie Rate: %.02f' % (i, player1_win/ i, player2_win / i, ties / i))
+
+        player1.update()
+        player2.update()
+
+        gm.reset()
+
+    player1.save_policy()
+    player2.save_policy()
+
+def compete(turns):
+    player1 = Player(epsilon=0)
+    player2 = Player(epsilon=0)
+
+    gm = Game_Master(player1, player2)
+    player1.load_policy()
+    player2.load_policy()
+    player1_win = 0.0
+    player2_win = 0.0
+    ties = 0.0
+
+    for _ in range(turns):
+        winner = gm.play()
+        if winner == 1:
+            player1_win += 1
+        if winner == -1:
+            player2_win += 1
+        if winner == 0:
+            ties += 1
+        gm.reset()
+
+    print('In %d turns, Player 1 winrate: %.02f, Player 2 win %.02f, Tie Rate: %.02f' % (turns, player1_win / turns, player2_win / turns, ties / turns))
 
 if __name__ == "__main__":
     
-
-    #TODO: pylint
+    train(int(1e5))
+    compete(int(1e3))
     
